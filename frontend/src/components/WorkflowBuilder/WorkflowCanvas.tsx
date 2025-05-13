@@ -49,6 +49,8 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 }) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
+  // nodeTypes is now defined at the module level below
+
   return (
     <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%' }} onDragOver={onDragOver} onDrop={onDrop}>
       <ReactFlow
@@ -57,7 +59,7 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        nodeTypes={{ apiNode: ApiNode }} // Register the custom node
+        nodeTypes={nodeTypes} // Use the memoized nodeTypes
         onNodeClick={(_event, node) => {
           if (node.data && node.data.apiDefinition) {
             // Pass the apiDefinition part of the node's data
@@ -77,5 +79,8 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     </div>
   );
 };
+
+// Define nodeTypes at the module level so it's created only once.
+const nodeTypes = { apiNode: ApiNode };
 
 export default WorkflowCanvas;

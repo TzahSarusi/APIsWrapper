@@ -188,6 +188,7 @@ function Home() {
   );
   
   const handleNodeSelectedForConfig = useCallback((nodeData: CanvasApiNodeData | null) => {
+    console.log("Node selected on canvas, data received in page.tsx:", nodeData); // Debug log
     setSelectedApiForConfig(nodeData);
   }, []);
 
