@@ -8,6 +8,9 @@ router.post('/', apiDefinitionController.importApiDefinition);
 // GET /api/definitions - List all API definitions
 router.get('/', apiDefinitionController.listApiDefinitions);
 
-// Placeholder for other routes like GET /api/definitions/:id, DELETE /api/definitions/:id
+// DELETE /api/definitions/:id - Delete an API definition
+router.delete('/:id', apiDefinitionController.deleteApiDefinition);
+
+// Placeholder for other routes like GET /api/definitions/:id
 
 module.exports = router;

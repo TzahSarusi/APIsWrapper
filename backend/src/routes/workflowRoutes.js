@@ -11,6 +11,9 @@ router.get('/', workflowController.listWorkflows);
 // GET /api/workflows/:id - Get a specific workflow by ID
 router.get('/:id', workflowController.getWorkflowById);
 
-// Placeholder for PUT /api/workflows/:id (update) and DELETE /api/workflows/:id
+// DELETE /api/workflows/:id - Delete a workflow
+router.delete('/:id', workflowController.deleteWorkflow);
+
+// Placeholder for PUT /api/workflows/:id (update)
 
 module.exports = router;

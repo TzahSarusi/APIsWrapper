@@ -77,3 +77,30 @@ exports.getWorkflowById = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch workflow' });
   }
 };
+
+// Delete a workflow
+exports.deleteWorkflow = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Workflow ID is required' });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('workflows')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase error deleting workflow:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.status(200).json({ message: 'Workflow deleted successfully' });
+    // Or res.status(204).send();
+  } catch (err) {
+    console.error('Server error deleting workflow:', err);
+    res.status(500).json({ error: 'Failed to delete workflow' });
+  }
+};

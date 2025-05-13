@@ -44,7 +44,37 @@ exports.listApiDefinitions = async (req, res) => {
     }
     res.status(200).json(data);
   } catch (err) {
-    console.error('Server error:', err);
+    console.error('Server error listing API definitions:', err);
     res.status(500).json({ error: 'Failed to list API definitions' });
+  }
+};
+
+// Delete an API definition
+exports.deleteApiDefinition = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'API Definition ID is required' });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('api_definitions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase error deleting API definition:', error);
+      // Check for specific errors, e.g., if the ID doesn't exist, Supabase might not error but return 0 rows affected.
+      // However, a simple delete operation usually returns an error if the ID format is wrong or a DB constraint is violated.
+      return res.status(500).json({ error: error.message });
+    }
+
+    // If no error, the delete was successful (even if 0 rows were deleted because ID didn't exist)
+    res.status(200).json({ message: 'API definition deleted successfully' }); 
+    // Or use 204 No Content if you prefer not to send a body for successful deletes: res.status(204).send();
+  } catch (err) {
+    console.error('Server error deleting API definition:', err);
+    res.status(500).json({ error: 'Failed to delete API definition' });
   }
 };
