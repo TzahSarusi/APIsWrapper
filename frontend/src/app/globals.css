@@ -1,9 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #1E2939; /* primary-dark hex value */
-  /* font-family: 'Inter', sans-serif; Temporarily removed */
-  /* color: #e2e8f0; Temporarily removed */
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: theme('colors.primary-dark');
+    color: theme('colors.slate.200'); /* Default light text color */
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 8px; /* 1 unit */
+    height: 8px; /* 1 unit */
+  }
+  ::-webkit-scrollbar-track {
+    background: theme('colors.slate.800'); /* Darker track */
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.muted-text');
+    border-radius: 10px;
+    border: 2px solid theme('colors.slate.800'); /* Creates padding around thumb */
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.slate.400');
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.muted-text') theme('colors.slate.800');
+  }
 }
