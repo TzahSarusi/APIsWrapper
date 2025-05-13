@@ -10,10 +10,9 @@ import {
   useEdgesState,
   addEdge,
   useReactFlow,
-  Node,
+  Node as FlowNode, // Renamed to avoid conflict with DOM Node type
   Edge,
   Connection,
-  // Viewport, // Not directly used here for now
 } from 'reactflow';
 
 export interface ApiDefinition {
@@ -33,6 +32,18 @@ export interface ApiDefinition {
       [statusCode: string]: any;
     };
   };
+}
+
+interface WorkflowListItem {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
+interface FullWorkflow extends WorkflowListItem {
+  nodes: FlowNode[]; // Use renamed FlowNode
+  edges: Edge[];
 }
 
 const SAMPLE_APIS: ApiDefinition[] = [
@@ -85,15 +96,23 @@ const SAMPLE_APIS: ApiDefinition[] = [
   },
 ];
 
-function Home() { // Renamed from 'export default function Home' to be wrapped by Provider
+function Home() {
   const [apiDefs, setApiDefs] = useState<ApiDefinition[]>([]);
   const [isLoadingApis, setIsLoadingApis] = useState<boolean>(true);
   const [errorLoadingApis, setErrorLoadingApis] = useState<string | null>(null);
   const [selectedApiForConfig, setSelectedApiForConfig] = useState<ApiDefinition | CanvasApiNodeData | null>(null);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  // Define a type for the data property of our API nodes
+  interface ApiNodeDataType {
+    label: string;
+    apiDefinition: ApiDefinition;
+  }
+  const [nodes, setNodes, onNodesChange] = useNodesState<ApiNodeDataType>([]); // Use the new type
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   
+  const [savedWorkflows, setSavedWorkflows] = useState<WorkflowListItem[]>([]);
+  const [isLoadingSavedWorkflows, setIsLoadingSavedWorkflows] = useState<boolean>(false);
+
   const nodeIdCounter = useRef(0);
   const getNewNodeId = () => `dndnode_${nodeIdCounter.current++}`;
   
@@ -116,8 +135,24 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
     }
   };
 
+  const fetchSavedWorkflows = async () => {
+    setIsLoadingSavedWorkflows(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/workflows`);
+      if (!response.ok) throw new Error(`Failed to fetch saved workflows: ${response.statusText}`);
+      const data = await response.json();
+      setSavedWorkflows(data);
+    } catch (error: any) {
+      console.error("Error fetching saved workflows:", error);
+    } finally {
+      setIsLoadingSavedWorkflows(false);
+    }
+  };
+
   useEffect(() => {
     fetchApiDefinitions();
+    fetchSavedWorkflows();
   }, []);
 
   const onConnect = useCallback(
@@ -135,25 +170,19 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
       event.preventDefault();
       const reactFlowBounds = event.currentTarget.getBoundingClientRect();
       const type = event.dataTransfer.getData('application/reactflow');
-
       if (typeof type === 'undefined' || !type) return;
-
       try {
         const apiData: ApiDefinition = JSON.parse(type);
         const position = reactFlowInstance.screenToFlowPosition({
           x: event.clientX - reactFlowBounds.left,
           y: event.clientY - reactFlowBounds.top,
         });
-        const newNode: Node = {
-          id: getNewNodeId(),
-          type: 'apiNode',
-          position,
-          data: { label: `${apiData.method} ${apiData.name}`, apiDefinition: apiData },
+        const newNode: FlowNode<CanvasApiNodeData> = { // Use FlowNode and specify data type
+          id: getNewNodeId(), type: 'apiNode', position,
+          data: { label: `${apiData.method} ${apiData.name}`, apiDefinition: apiData } as any, // Cast data for now
         };
-        setNodes((nds) => nds.concat(newNode));
-      } catch (error) {
-        console.error("Failed to parse dropped JSON or create node:", error);
-      }
+        setNodes((nds) => nds.concat(newNode as any)); // Cast node for now
+      } catch (error) { console.error("Failed to parse dropped JSON or create node:", error); }
     },
     [reactFlowInstance, setNodes]
   );
@@ -165,12 +194,10 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
   const handleSaveWorkflow = async () => {
     const workflowName = prompt("Enter workflow name:");
     if (!workflowName) return;
-
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const response = await fetch(`${apiUrl}/api/workflows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: workflowName, nodes: nodes, edges: edges }),
       });
       if (!response.ok) {
@@ -178,22 +205,65 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
         throw new Error(errData.error || `Failed to save workflow: ${response.statusText}`);
       }
       alert('Workflow saved successfully!');
+      fetchSavedWorkflows();
     } catch (error: any) {
       console.error("Error saving workflow:", error);
       alert(`Error saving workflow: ${error.message}`);
     }
   };
 
+  const handleLoadWorkflow = async (workflowId: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/workflows/${workflowId}`);
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || `Failed to load workflow: ${response.statusText}`);
+      }
+      const workflowData: FullWorkflow = await response.json();
+      setNodes(workflowData.nodes || []);
+      setEdges(workflowData.edges || []);
+      alert(`Workflow "${workflowData.name}" loaded successfully!`);
+    } catch (error: any) {
+      console.error("Error loading workflow:", error);
+      alert(`Error loading workflow: ${error.message}`);
+    }
+  };
+
+  const handleExportWorkflow = () => {
+    if (nodes.length === 0) {
+      alert("Canvas is empty. Add some API nodes to export.");
+      return;
+    }
+    // Basic export: just the apiDefinition from each node
+    // More advanced: determine order from edges
+    const exportedApiDefinitions = nodes.map(node => node.data.apiDefinition); // This should now work correctly
+    
+    const jsonString = JSON.stringify(exportedApiDefinitions, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "workflow.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    alert("Workflow exported as workflow.json");
+  };
+
   return (
     <main className="flex h-screen flex-col bg-gray-900 text-white">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-semibold">API Workflow Builder</h1>
-        <button 
-          onClick={handleSaveWorkflow}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md"
-        >
-          Save Workflow
-        </button>
+        <div className="flex space-x-2">
+          <button onClick={handleSaveWorkflow} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">
+            Save Workflow
+          </button>
+          <button onClick={handleExportWorkflow} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md">
+            Export Workflow
+          </button>
+        </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-1/4 bg-gray-800 p-4 overflow-y-auto space-y-6">
@@ -210,24 +280,12 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
             )}
             <div className="space-y-2">
               {apiDefs.map((api) => (
-                <div 
-                  key={api.id} 
-                  className="p-3 bg-gray-700 rounded-md hover:bg-gray-600 cursor-pointer"
-                  onClick={() => setSelectedApiForConfig(api)}
-                  draggable={true}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData('application/reactflow', JSON.stringify(api));
-                    event.dataTransfer.effectAllowed = 'move';
-                  }}
-                >
+                <div key={api.id} className="p-3 bg-gray-700 rounded-md hover:bg-gray-600 cursor-pointer"
+                  onClick={() => setSelectedApiForConfig(api)} draggable={true}
+                  onDragStart={(event) => { event.dataTransfer.setData('application/reactflow', JSON.stringify(api)); event.dataTransfer.effectAllowed = 'move'; }}>
                   <h4 className="font-semibold text-sm">{api.name}</h4>
                   <p className="text-xs text-gray-300">
-                    <span className={`font-bold ${
-                      api.method === 'GET' ? 'text-green-400' :
-                      api.method === 'POST' ? 'text-blue-400' :
-                      api.method === 'PUT' ? 'text-yellow-400' :
-                      api.method === 'DELETE' ? 'text-red-400' : 'text-gray-400'
-                    }`}>{api.method}</span> {api.endpoint}
+                    <span className={`font-bold ${ api.method === 'GET' ? 'text-green-400' : api.method === 'POST' ? 'text-blue-400' : api.method === 'PUT' ? 'text-yellow-400' : api.method === 'DELETE' ? 'text-red-400' : 'text-gray-400'}`}>{api.method}</span> {api.endpoint}
                   </p>
                   {api.description && <p className="text-xs text-gray-400 mt-1">{api.description}</p>}
                 </div>
@@ -235,26 +293,29 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
               {SAMPLE_APIS.length > 0 && apiDefs.length > 0 && <hr className="my-4 border-gray-600" />}
               {SAMPLE_APIS.length > 0 && <h3 className="text-sm font-semibold text-gray-400 mt-2 mb-1">Test Data:</h3>}
               {SAMPLE_APIS.map((api) => (
-                <div 
-                  key={api.id} 
-                  className="p-3 bg-gray-650 rounded-md hover:bg-gray-600 cursor-pointer border border-dashed border-gray-500"
-                  onClick={() => setSelectedApiForConfig(api)}
-                  draggable={true}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData('application/reactflow', JSON.stringify(api));
-                    event.dataTransfer.effectAllowed = 'move';
-                  }}
-                >
+                <div key={api.id} className="p-3 bg-gray-650 rounded-md hover:bg-gray-600 cursor-pointer border border-dashed border-gray-500"
+                  onClick={() => setSelectedApiForConfig(api)} draggable={true}
+                  onDragStart={(event) => { event.dataTransfer.setData('application/reactflow', JSON.stringify(api)); event.dataTransfer.effectAllowed = 'move'; }}>
                   <h4 className="font-semibold text-sm">{api.name} <span className="text-xs text-yellow-400">(Test)</span></h4>
                   <p className="text-xs text-gray-300">
-                    <span className={`font-bold ${
-                      api.method === 'GET' ? 'text-green-400' :
-                      api.method === 'POST' ? 'text-blue-400' :
-                      api.method === 'PUT' ? 'text-yellow-400' :
-                      api.method === 'DELETE' ? 'text-red-400' : 'text-gray-400'
-                    }`}>{api.method}</span> {api.endpoint}
+                    <span className={`font-bold ${ api.method === 'GET' ? 'text-green-400' : api.method === 'POST' ? 'text-blue-400' : api.method === 'PUT' ? 'text-yellow-400' : api.method === 'DELETE' ? 'text-red-400' : 'text-gray-400'}`}>{api.method}</span> {api.endpoint}
                   </p>
                   {api.description && <p className="text-xs text-gray-400 mt-1">{api.description}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-6">
+            <h2 className="text-lg font-medium mb-2">Saved Workflows</h2>
+            {isLoadingSavedWorkflows && <p className="text-gray-400">Loading saved workflows...</p>}
+            {!isLoadingSavedWorkflows && savedWorkflows.length === 0 && <p className="text-gray-400">No workflows saved yet.</p>}
+            <div className="space-y-2">
+              {savedWorkflows.map(wf => (
+                <div key={wf.id} className="p-3 bg-gray-700 rounded-md hover:bg-gray-600 cursor-pointer"
+                  onClick={() => handleLoadWorkflow(wf.id)}>
+                  <h4 className="font-semibold text-sm">{wf.name}</h4>
+                  {wf.description && <p className="text-xs text-gray-400 mt-1">{wf.description}</p>}
+                  <p className="text-xs text-gray-500 mt-1">Saved: {new Date(wf.created_at).toLocaleDateString()}</p>
                 </div>
               ))}
             </div>
@@ -262,16 +323,8 @@ function Home() { // Renamed from 'export default function Home' to be wrapped b
         </aside>
         <section className="flex-1 bg-gray-700 flex flex-col items-stretch">
           <div className="flex-grow p-1">
-            <WorkflowCanvas 
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeSelected={handleNodeSelectedForConfig}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-            />
+            <WorkflowCanvas nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+              onConnect={onConnect} onNodeSelected={handleNodeSelectedForConfig} onDrop={onDrop} onDragOver={onDragOver} />
           </div>
         </section>
         <aside className="w-1/4 bg-gray-800 p-4 overflow-y-auto">
