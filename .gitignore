@@ -1,0 +1,32 @@
+# Node.js
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build outputs
+.next/
+frontend/.next/
+backend/.next/
+frontend/out/
+backend/out/
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
+frontend/.env.local
+backend/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.swp
+*.swo
