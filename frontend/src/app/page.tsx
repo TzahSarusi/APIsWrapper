@@ -1,25 +1,35 @@
-"use client"; // Required for useState and useEffect
+"use client"; 
 
-import React, { useState, useEffect } from 'react'; // Import useState and useEffect
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import ApiImportForm from '@/components/ApiImport/ApiImportForm';
-import WorkflowCanvas from '@/components/WorkflowBuilder/WorkflowCanvas'; // Import the canvas
+import WorkflowCanvas, { CanvasApiNodeData } from '@/components/WorkflowBuilder/WorkflowCanvas';
+import {
+  ReactFlowProvider,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  useReactFlow,
+  Node,
+  Edge,
+  Connection,
+  // Viewport, // Not directly used here for now
+} from 'reactflow';
 
-// Define a type for the API definition structure
-interface ApiDefinition {
+export interface ApiDefinition {
   id: string;
   name: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD'; // More specific methods
-  endpoint: string; // Corresponds to 'path' in your example
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
+  endpoint: string;
   description?: string;
-  category?: string; // Optional
-  iconName?: string; // Optional, for potential future icon display
-  isDummy?: boolean; // To distinguish test data
-  schema?: { // For request/response previews and configuration
+  category?: string;
+  iconName?: string;
+  isDummy?: boolean;
+  schema?: {
     pathParams?: Array<{ name: string; type: string; description?: string; required?: boolean }>;
     queryParams?: Array<{ name: string; type: string; description?: string; required?: boolean }>;
-    requestBody?: any; // Example or JSON schema for request body
-    responsePreview?: { // Example responses
+    requestBody?: any;
+    responsePreview?: {
       [statusCode: string]: any;
     };
   };
@@ -38,16 +48,7 @@ const SAMPLE_APIS: ApiDefinition[] = [
     schema: {
       pathParams: [{ name: 'id', type: 'string', description: 'User ID', required: true }],
       responsePreview: {
-        "200": {
-          status: 200,
-          data: {
-            id: "uuid-1234",
-            name: "John Doe",
-            email: "john@example.com",
-            role: "user",
-            created_at: "2025-05-13T14:01:03.917Z"
-          }
-        }
+        "200": { status: 200, data: { id: "uuid-1234", name: "John Doe", email: "john@example.com", role: "user", created_at: "2025-05-13T14:01:03.917Z" } }
       }
     }
   },
@@ -61,21 +62,9 @@ const SAMPLE_APIS: ApiDefinition[] = [
     iconName: 'User',
     isDummy: true,
     schema: {
-      requestBody: {
-        username: "newuser",
-        email: "new@example.com",
-        password: "securepassword123"
-      },
+      requestBody: { username: "newuser", email: "new@example.com", password: "securepassword123" },
       responsePreview: {
-        "201": {
-          status: 201,
-          data: {
-            id: "uuid-5678",
-            username: "newuser",
-            email: "new@example.com",
-            created_at: "2025-05-13T14:05:00.000Z"
-          }
-        }
+        "201": { status: 201, data: { id: "uuid-5678", username: "newuser", email: "new@example.com", created_at: "2025-05-13T14:05:00.000Z" } }
       }
     }
   },
@@ -90,24 +79,25 @@ const SAMPLE_APIS: ApiDefinition[] = [
     isDummy: true,
     schema: {
       responsePreview: {
-        "200": {
-          status: 200,
-          data: [
-            { id: "prod-001", name: "Laptop Pro", price: 1200.00 },
-            { id: "prod-002", name: "Wireless Mouse", price: 25.00 }
-          ]
-        }
+        "200": { status: 200, data: [ { id: "prod-001", name: "Laptop Pro", price: 1200.00 }, { id: "prod-002", name: "Wireless Mouse", price: 25.00 } ] }
       }
     }
   },
 ];
 
-
-export default function Home() {
-  const [apiDefs, setApiDefs] = useState<ApiDefinition[]>([]); // For APIs from backend
+function Home() { // Renamed from 'export default function Home' to be wrapped by Provider
+  const [apiDefs, setApiDefs] = useState<ApiDefinition[]>([]);
   const [isLoadingApis, setIsLoadingApis] = useState<boolean>(true);
   const [errorLoadingApis, setErrorLoadingApis] = useState<string | null>(null);
-  const [selectedApi, setSelectedApi] = useState<ApiDefinition | null>(null); // For configuration panel
+  const [selectedApiForConfig, setSelectedApiForConfig] = useState<ApiDefinition | CanvasApiNodeData | null>(null);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  
+  const nodeIdCounter = useRef(0);
+  const getNewNodeId = () => `dndnode_${nodeIdCounter.current++}`;
+  
+  const reactFlowInstance = useReactFlow();
 
   const fetchApiDefinitions = async () => {
     setIsLoadingApis(true);
@@ -115,9 +105,7 @@ export default function Home() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const response = await fetch(`${apiUrl}/api/definitions`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch API definitions: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch API definitions: ${response.statusText}`);
       const data = await response.json();
       setApiDefs(data);
     } catch (error: any) {
@@ -130,34 +118,107 @@ export default function Home() {
 
   useEffect(() => {
     fetchApiDefinitions();
-  }, []); // Fetch on initial component mount
+  }, []);
+
+  const onConnect = useCallback(
+    (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+      const type = event.dataTransfer.getData('application/reactflow');
+
+      if (typeof type === 'undefined' || !type) return;
+
+      try {
+        const apiData: ApiDefinition = JSON.parse(type);
+        const position = reactFlowInstance.screenToFlowPosition({
+          x: event.clientX - reactFlowBounds.left,
+          y: event.clientY - reactFlowBounds.top,
+        });
+        const newNode: Node = {
+          id: getNewNodeId(),
+          type: 'apiNode',
+          position,
+          data: { label: `${apiData.method} ${apiData.name}`, apiDefinition: apiData },
+        };
+        setNodes((nds) => nds.concat(newNode));
+      } catch (error) {
+        console.error("Failed to parse dropped JSON or create node:", error);
+      }
+    },
+    [reactFlowInstance, setNodes]
+  );
+  
+  const handleNodeSelectedForConfig = useCallback((nodeData: CanvasApiNodeData | null) => {
+    setSelectedApiForConfig(nodeData);
+  }, []);
+
+  const handleSaveWorkflow = async () => {
+    const workflowName = prompt("Enter workflow name:");
+    if (!workflowName) return;
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/workflows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: workflowName, nodes: nodes, edges: edges }),
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || `Failed to save workflow: ${response.statusText}`);
+      }
+      alert('Workflow saved successfully!');
+    } catch (error: any) {
+      console.error("Error saving workflow:", error);
+      alert(`Error saving workflow: ${error.message}`);
+    }
+  };
 
   return (
     <main className="flex h-screen flex-col bg-gray-900 text-white">
-      <header className="bg-gray-800 p-4 shadow-md">
+      <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-semibold">API Workflow Builder</h1>
+        <button 
+          onClick={handleSaveWorkflow}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md"
+        >
+          Save Workflow
+        </button>
       </header>
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Panel: API Explorer */}
         <aside className="w-1/4 bg-gray-800 p-4 overflow-y-auto space-y-6">
           <div>
             <h2 className="text-lg font-medium mb-2">Import APIs</h2>
-            <ApiImportForm onImportSuccess={fetchApiDefinitions} /> {/* Pass the callback */}
+            <ApiImportForm onImportSuccess={fetchApiDefinitions} />
           </div>
           <div>
             <h2 className="text-lg font-medium mb-2">Available APIs</h2>
             {isLoadingApis && <p className="text-gray-400">Loading APIs...</p>}
             {errorLoadingApis && <p className="text-red-400">Error: {errorLoadingApis}</p>}
-            {!isLoadingApis && !errorLoadingApis && apiDefs.length === 0 && (
-              <p className="text-gray-400">No APIs imported yet.</p>
+            {!isLoadingApis && !errorLoadingApis && apiDefs.length === 0 && SAMPLE_APIS.length === 0 && (
+              <p className="text-gray-400">No APIs available.</p>
             )}
             <div className="space-y-2">
-              {/* Display Real APIs */}
               {apiDefs.map((api) => (
                 <div 
                   key={api.id} 
                   className="p-3 bg-gray-700 rounded-md hover:bg-gray-600 cursor-pointer"
-                  onClick={() => setSelectedApi(api)}
+                  onClick={() => setSelectedApiForConfig(api)}
+                  draggable={true}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData('application/reactflow', JSON.stringify(api));
+                    event.dataTransfer.effectAllowed = 'move';
+                  }}
                 >
                   <h4 className="font-semibold text-sm">{api.name}</h4>
                   <p className="text-xs text-gray-300">
@@ -171,15 +232,18 @@ export default function Home() {
                   {api.description && <p className="text-xs text-gray-400 mt-1">{api.description}</p>}
                 </div>
               ))}
-              {/* Separator or Title for Dummy APIs */}
               {SAMPLE_APIS.length > 0 && apiDefs.length > 0 && <hr className="my-4 border-gray-600" />}
               {SAMPLE_APIS.length > 0 && <h3 className="text-sm font-semibold text-gray-400 mt-2 mb-1">Test Data:</h3>}
-              {/* Display Dummy APIs */}
               {SAMPLE_APIS.map((api) => (
                 <div 
                   key={api.id} 
-                  className="p-3 bg-gray-650 rounded-md hover:bg-gray-600 cursor-pointer border border-dashed border-gray-500" // Visual distinction
-                  onClick={() => setSelectedApi(api)}
+                  className="p-3 bg-gray-650 rounded-md hover:bg-gray-600 cursor-pointer border border-dashed border-gray-500"
+                  onClick={() => setSelectedApiForConfig(api)}
+                  draggable={true}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData('application/reactflow', JSON.stringify(api));
+                    event.dataTransfer.effectAllowed = 'move';
+                  }}
                 >
                   <h4 className="font-semibold text-sm">{api.name} <span className="text-xs text-yellow-400">(Test)</span></h4>
                   <p className="text-xs text-gray-300">
@@ -196,60 +260,59 @@ export default function Home() {
             </div>
           </div>
         </aside>
-
-        {/* Center Panel: Workflow Builder */}
         <section className="flex-1 bg-gray-700 flex flex-col items-stretch">
           <div className="flex-grow p-1">
-            <WorkflowCanvas />
+            <WorkflowCanvas 
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeSelected={handleNodeSelectedForConfig}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+            />
           </div>
         </section>
-
-        {/* Right Panel: Configuration Panel */}
         <aside className="w-1/4 bg-gray-800 p-4 overflow-y-auto">
           <h2 className="text-lg font-medium mb-4">Configuration Panel</h2>
-          {selectedApi ? (
+          {selectedApiForConfig ? (
             <div className="text-sm">
-              <h3 className="font-semibold text-md mb-1">{selectedApi.name} {selectedApi.isDummy && <span className="text-xs text-yellow-400">(Test Data)</span>}</h3>
-              <p className="text-gray-300"><strong className="text-gray-200">Method:</strong> {selectedApi.method}</p>
-              <p className="text-gray-300"><strong className="text-gray-200">Endpoint:</strong> {selectedApi.endpoint}</p>
-              {selectedApi.description && <p className="text-gray-300 mt-1"><strong className="text-gray-200">Description:</strong> {selectedApi.description}</p>}
-              
-              {selectedApi.schema?.pathParams && selectedApi.schema.pathParams.length > 0 && (
+              <h3 className="font-semibold text-md mb-1">{selectedApiForConfig.name} {selectedApiForConfig.isDummy && <span className="text-xs text-yellow-400">(Test Data)</span>}</h3>
+              <p className="text-gray-300"><strong className="text-gray-200">Method:</strong> {selectedApiForConfig.method}</p>
+              <p className="text-gray-300"><strong className="text-gray-200">Endpoint:</strong> {selectedApiForConfig.endpoint}</p>
+              {selectedApiForConfig.description && <p className="text-gray-300 mt-1"><strong className="text-gray-200">Description:</strong> {selectedApiForConfig.description}</p>}
+              {selectedApiForConfig.schema?.pathParams && selectedApiForConfig.schema.pathParams.length > 0 && (
                 <div className="mt-3">
                   <h4 className="font-semibold text-gray-200">Path Parameters:</h4>
                   <ul className="list-disc list-inside pl-2 text-gray-300">
-                    {selectedApi.schema.pathParams.map(p => <li key={p.name}>{p.name}: {p.type} {p.required && '(required)'}</li>)}
+                    {selectedApiForConfig.schema.pathParams.map((p: { name: string; type: string; required?: boolean }) => <li key={p.name}>{p.name}: {p.type} {p.required && '(required)'}</li>)}
                   </ul>
                 </div>
               )}
-
-              {/* Request Preview */}
               <div className="mt-4">
                 <h4 className="font-semibold text-gray-200 mb-1">Request Preview:</h4>
                 <pre className="bg-gray-900 p-2 rounded-md text-xs text-gray-300 overflow-x-auto">
-                  {`Method: ${selectedApi.method}\nURL: ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}${selectedApi.endpoint}\nHeaders: {\n  "Content-Type": "application/json",\n  "Authorization": "Bearer \${workflow.auth_token}"\n}`}
-                  {selectedApi.schema?.requestBody && `\nBody:\n${JSON.stringify(selectedApi.schema.requestBody, null, 2)}`}
+                  {`Method: ${selectedApiForConfig.method}\nURL: ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}${selectedApiForConfig.endpoint}\nHeaders: {\n  "Content-Type": "application/json",\n  "Authorization": "Bearer \${workflow.auth_token}"\n}`}
+                  {selectedApiForConfig.schema?.requestBody && `\nBody:\n${JSON.stringify(selectedApiForConfig.schema.requestBody, null, 2)}`}
                 </pre>
               </div>
-
-              {/* Response Preview */}
-              {selectedApi.schema?.responsePreview && selectedApi.schema.responsePreview["200"] && (
+              {selectedApiForConfig.schema?.responsePreview && selectedApiForConfig.schema.responsePreview["200"] && (
                 <div className="mt-3">
                   <h4 className="font-semibold text-gray-200 mb-1">Response Preview (200 OK):</h4>
                   <pre className="bg-gray-900 p-2 rounded-md text-xs text-gray-300 overflow-x-auto">
-                    {JSON.stringify(selectedApi.schema.responsePreview["200"], null, 2)}
+                    {JSON.stringify(selectedApiForConfig.schema.responsePreview["200"], null, 2)}
                   </pre>
                 </div>
               )}
-               {selectedApi.schema?.responsePreview && selectedApi.schema.responsePreview["201"] && (
+               {selectedApiForConfig.schema?.responsePreview && selectedApiForConfig.schema.responsePreview["201"] && (
                 <div className="mt-3">
                   <h4 className="font-semibold text-gray-200 mb-1">Response Preview (201 Created):</h4>
                   <pre className="bg-gray-900 p-2 rounded-md text-xs text-gray-300 overflow-x-auto">
-                    {JSON.stringify(selectedApi.schema.responsePreview["201"], null, 2)}
+                    {JSON.stringify(selectedApiForConfig.schema.responsePreview["201"], null, 2)}
                   </pre>
                 </div>
               )}
-
             </div>
           ) : (
             <p className="text-gray-400">Select an API block to configure its properties.</p>
@@ -259,3 +322,11 @@ export default function Home() {
     </main>
   );
 }
+
+const HomePageWithProvider = () => (
+  <ReactFlowProvider>
+    <Home />
+  </ReactFlowProvider>
+);
+
+export default HomePageWithProvider;

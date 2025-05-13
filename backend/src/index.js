@@ -19,9 +19,9 @@ app.get('/', (req, res) => {
 const apiDefinitionRoutes = require('./routes/apiDefinitionRoutes'); // Corrected path
 app.use('/api/definitions', apiDefinitionRoutes);
 
-// Placeholder for workflow routes
-// const workflowRoutes = require('./routes/workflowRoutes');
-// app.use('/api/workflows', workflowRoutes);
+// Workflow routes
+const workflowRoutes = require('./routes/workflowRoutes');
+app.use('/api/workflows', workflowRoutes);
 
 app.listen(port, () => {
   console.log(`Backend server listening on port ${port}`);
