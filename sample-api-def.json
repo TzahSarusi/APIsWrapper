@@ -1,0 +1,32 @@
+{
+  "name": "Get User Profile",
+  "method": "GET",
+  "endpoint": "/users/{id}",
+  "description": "Retrieves the profile information for a specific user.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "pathParams": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "User ID"
+          }
+        },
+        "required": ["id"]
+      },
+      "response": {
+        "200": {
+          "type": "object",
+          "properties": {
+            "userId": { "type": "string" },
+            "username": { "type": "string" },
+            "email": { "type": "string" },
+            "fullName": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
