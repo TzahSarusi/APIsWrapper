@@ -1,0 +1,122 @@
+{
+  "endpoints": [
+    {
+      "path": "/admin/api/2022-01/products.json",
+      "method": "GET",
+      "parameters": [],
+      "usage_example": "GET /admin/api/2022-01/products.json"
+    },
+    {
+      "path": "/admin/api/2022-01/products.json",
+      "method": "POST",
+      "parameters": [
+        {
+          "name": "product",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "usage_example": "POST /admin/api/2022-01/products.json"
+    },
+    {
+      "path": "/admin/api/2022-01/products/{product_id}.json",
+      "method": "GET",
+      "parameters": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "usage_example": "GET /admin/api/2022-01/products/{product_id}.json"
+    },
+    {
+      "path": "/admin/api/2022-01/products/{product_id}.json",
+      "method": "PUT",
+      "parameters": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "product",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "usage_example": "PUT /admin/api/2022-01/products/{product_id}.json"
+    },
+    {
+      "path": "/admin/api/2022-01/products/{product_id}.json",
+      "method": "DELETE",
+      "parameters": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "usage_example": "DELETE /admin/api/2022-01/products/{product_id}.json"
+    },
+    {
+      "path": "/admin/api/2022-01/orders.json",
+      "method": "GET",
+      "parameters": [],
+      "usage_example": "GET /admin/api/2022-01/orders.json"
+    },
+    {
+      "path": "/admin/api/2022-01/orders.json",
+      "method": "POST",
+      "parameters": [
+        {
+          "name": "order",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "usage_example": "POST /admin/api/2022-01/orders.json"
+    },
+    {
+      "path": "/admin/api/2022-01/orders/{order_id}.json",
+      "method": "GET",
+      "parameters": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "usage_example": "GET /admin/api/2022-01/orders/{order_id}.json"
+    },
+    {
+      "path": "/admin/api/2022-01/orders/{order_id}.json",
+      "method": "PUT",
+      "parameters": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "order",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "usage_example": "PUT /admin/api/2022-01/orders/{order_id}.json"
+    },
+    {
+      "path": "/admin/api/2022-01/orders/{order_id}.json",
+      "method": "DELETE",
+      "parameters": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "usage_example": "DELETE /admin/api/2022-01/orders/{order_id}.json"
+    }
+  ]
+}
