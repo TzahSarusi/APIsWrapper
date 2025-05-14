@@ -1,0 +1,7 @@
+POST http://127.0.0.1:8002/fetch-markdown/
+Content-Type: application/json
+
+{
+  "url": "https://shopify.dev/docs/api/admin-rest",
+  "markdown_content": "A long string of Markdown text extracted from the page..."
+}
